@@ -1,0 +1,19 @@
+slam_toolbox:
+  ros__parameters:
+    mode: mapping  # ต้องเป็น mapping
+    map_frame: map
+    odom_frame: odom
+    base_frame: base_link
+    scan_topic: /scan
+    odom_topic: /odom
+    minimum_travel_distance: 0.001
+    minimum_travel_heading: 0.001
+    scan_queue_size: 20
+    transform_publish_period: 0.02
+    transform_tolerance: 0.2
+    tf_buffer_duration: 30.0
+    correlation_search_space_yaw: 0.1
+    loop_search_maximum_distance: 2.0
+    do_loop_closing: true
+    max_laser_range: 12.0
+    minimum_time_interval: 0.05
