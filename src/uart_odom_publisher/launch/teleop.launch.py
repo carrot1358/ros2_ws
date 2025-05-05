@@ -15,7 +15,7 @@ def generate_launch_description():
         # ประกาศพารามิเตอร์ที่ผู้ใช้สามารถส่งผ่าน command line
         DeclareLaunchArgument(
             'serial_port',
-            default_value='/dev/ttyACM0',
+            default_value='/dev/ttyAMA0',
             description='พอร์ต serial ที่เชื่อมต่อกับ Pico'
         ),
         
