@@ -6,10 +6,8 @@ import threading
 import serial
 import json
 import sys
-import termios
-import tty
-import select
 import time
+import select
 
 # คีย์สำหรับควบคุม
 KEYS = {
@@ -17,7 +15,8 @@ KEYS = {
     's': (-1, 0),    # ถอยหลัง
     'a': (0, 1),     # หมุนซ้าย
     'd': (0, -1),    # หมุนขวา
-    'q': (0, 0)      # หยุด
+    'q': (0, 0),     # หยุด
+    ' ': (0, 0)      # space = หยุด
 }
 
 # ข้อความแสดงวิธีใช้
@@ -36,7 +35,7 @@ class TeleopNode(Node):
         super().__init__('teleop_node')
         
         # รับพารามิเตอร์จาก launch file หรือ command line
-        self.declare_parameter('serial_port', '/dev/ttyACM0')
+        self.declare_parameter('serial_port', '/dev/ttyAMA0')
         self.declare_parameter('baudrate', 115200)
         self.declare_parameter('max_speed', 50)  # ความเร็วสูงสุดของมอเตอร์ (0-100)
         self.declare_parameter('max_turn', 30)   # ความเร็วเลี้ยวสูงสุด
@@ -66,13 +65,13 @@ class TeleopNode(Node):
         # ตัวแปรสำหรับเก็บค่าความเร็ว
         self.linear_speed = 0.0
         self.angular_speed = 0.0
+        self.current_left_speed = 0  # เพิ่มตัวแปรเก็บความเร็วล้อซ้าย
+        self.current_right_speed = 0  # เพิ่มตัวแปรเก็บความเร็วล้อขวา
         
-        # สร้าง thread สำหรับส่งคำสั่งอย่างต่อเนื่อง
-        self.running = True
-        self.send_thread = threading.Thread(target=self.send_command_loop)
-        self.send_thread.daemon = True
-        self.send_thread.start()
+        # สร้าง timer สำหรับส่งคำสั่งอย่างต่อเนื่อง
+        self.timer = self.create_timer(0.1, self.send_command)  # ส่งคำสั่งทุก 100ms
         
+        # แสดงข้อความเริ่มต้น
         self.get_logger().info('เริ่มต้น Teleop Node แล้ว')
         self.get_logger().info(MSG)
     
@@ -81,16 +80,21 @@ class TeleopNode(Node):
         self.linear_speed = msg.linear.x
         self.angular_speed = msg.angular.z
     
-    def send_command_loop(self):
+    def send_command(self):
         """ส่งคำสั่งควบคุมมอเตอร์ไปยัง Pico"""
-        while self.running:
-            left_speed, right_speed = self.calculate_motor_speeds()
+        left_speed, right_speed = self.calculate_motor_speeds()
+        
+        # ตรวจสอบว่าค่าเปลี่ยนแปลงหรือไม่
+        if left_speed != self.current_left_speed or right_speed != self.current_right_speed:
+            # อัพเดตค่าปัจจุบัน
+            self.current_left_speed = left_speed
+            self.current_right_speed = right_speed
+            
             command = {'left': left_speed, 'right': right_speed}
             
             try:
                 self.ser.write((json.dumps(command) + '\r\n').encode())
-                self.get_logger().info(f'ส่งคำสั่ง: {command}')
-                time.sleep(0.05)  # ส่งคำสั่งทุก 50ms
+                self.get_logger().info(f'ส่งคำสั่ง: {command} (linear={self.linear_speed}, angular={self.angular_speed})')
             except Exception as e:
                 self.get_logger().error(f'เกิดข้อผิดพลาดในการส่งคำสั่ง: {e}')
     
@@ -112,77 +116,68 @@ class TeleopNode(Node):
             linear, angular = KEYS[key]
             self.linear_speed = linear
             self.angular_speed = angular
+            print(f"ตั้งค่าความเร็ว: เดินหน้า={self.linear_speed}, หมุน={self.angular_speed}")
             return True
         return False
     
     def shutdown(self):
         """หยุดการทำงานและปิด serial port"""
-        self.running = False
-        self.send_thread.join(timeout=1.0)
-        self.ser.close()
-
-def get_key(settings):
-    """อ่านปุ่มที่กดจากคีย์บอร์ด"""
-    tty.setraw(sys.stdin.fileno())
-    select.select([sys.stdin], [], [], 0)
-    key = sys.stdin.read(1)
-    termios.tcsetattr(sys.stdin, termios.TCSADRAIN, settings)
-    return key
+        if hasattr(self, 'ser'):
+            # ส่งคำสั่งหยุดก่อนปิด
+            command = {'left': 0, 'right': 0}
+            try:
+                self.ser.write((json.dumps(command) + '\r\n').encode())
+                self.get_logger().info('ส่งคำสั่งหยุดก่อนปิด')
+                time.sleep(0.1)  # รอให้คำสั่งถูกส่ง
+            except:
+                pass
+            self.ser.close()
 
 def main(args=None):
     rclpy.init(args=args)
     
-    try:
-        # ตรวจสอบว่ารันในโหมด interactive terminal หรือไม่
-        settings = termios.tcgetattr(sys.stdin)
-        is_interactive_terminal = True
-    except termios.error:
-        # ถ้าไม่ใช่ interactive terminal จะใช้โหมด topic แทน
-        is_interactive_terminal = False
-        print("ไม่สามารถใช้งานคีย์บอร์ดได้ในสภาพแวดล้อมนี้")
-        print("ใช้งานผ่าน topic cmd_vel แทน:")
-        print("  ros2 topic pub /cmd_vel geometry_msgs/msg/Twist \"linear: {x: 0.5}\" -1")
-    
     node = TeleopNode()
     
-    if is_interactive_terminal:
-        try:
-            # สร้าง thread สำหรับ ROS spin
-            spin_thread = threading.Thread(target=lambda: rclpy.spin(node))
-            spin_thread.daemon = True
-            spin_thread.start()
-            
-            # ลูปหลักสำหรับรับปุ่มกด
-            while rclpy.ok():
-                key = get_key(settings)
+    print("กรุณาป้อนคำสั่ง: w=เดินหน้า, s=ถอยหลัง, a=เลี้ยวซ้าย, d=เลี้ยวขวา, q=หยุด")
+    print("พิมพ์แล้วกด Enter หรือกด Ctrl+C เพื่อออก")
+    
+    # สร้าง thread สำหรับ ROS spin
+    spin_thread = threading.Thread(target=lambda: rclpy.spin(node))
+    spin_thread.daemon = True
+    spin_thread.start()
+    
+    try:
+        # ลูปหลักแบบง่าย รับคำสั่งเมื่อผู้ใช้กด Enter
+        while rclpy.ok():
+            try:
+                # รับคีย์จากผู้ใช้
+                key = input().strip().lower()
                 
-                # กด Ctrl+C เพื่อออกจากโปรแกรม
-                if key == '\x03':
+                if key == 'exit':
                     break
-                    
-                # กดปุ่ม space เพื่อหยุด
-                if key == ' ':
-                    node.linear_speed = 0.0
-                    node.angular_speed = 0.0
-                else:
-                    node.set_speeds_from_key(key)
                 
-        except Exception as e:
-            print(f"เกิดข้อผิดพลาด: {e}")
-        
-        finally:
-            # คืนค่า terminal เดิม
-            termios.tcsetattr(sys.stdin, termios.TCSADRAIN, settings)
-    else:
-        try:
-            rclpy.spin(node)
-        except KeyboardInterrupt:
-            pass
+                # ถ้าไม่มีข้อมูล
+                if not key:
+                    continue
+                
+                # ใช้ตัวอักษรแรก
+                first_key = key[0]
+                if first_key in "wsadq ":
+                    node.set_speeds_from_key(first_key)
+                else:
+                    print(f"ไม่รู้จักคำสั่ง: {first_key}")
+                
+            except KeyboardInterrupt:
+                break
             
-    # หยุดการทำงานและปิด node
-    node.shutdown()
-    node.destroy_node()
-    rclpy.shutdown()
+    except Exception as e:
+        print(f"เกิดข้อผิดพลาด: {e}")
+    
+    finally:
+        # หยุดการทำงานและปิด node
+        node.shutdown()
+        node.destroy_node()
+        rclpy.shutdown()
 
 if __name__ == '__main__':
     main() 
