@@ -33,8 +33,8 @@ WHEEL_BASE = 0.093         # ระยะห่างล้อ (เมตร)
 # ตำแหน่งเริ่มต้น
 x, y, theta = 0.0, 0.0, 0.0
 
-# กำหนด PWM frequency และ resolution
-PWM_FREQ = 20000  # ลดลงจาก 20000 เป็น 1000 Hz เพื่อให้เห็นการทำงานชัดเจนขึ้น
+# กำหนด PWM frequency
+PWM_FREQ = 20000 
 
 # กำหนดขา
 pwm_left = PWM(Pin(7))   # สำหรับความเร็วล้อซ้าย
@@ -58,7 +58,7 @@ dir1_right.value(0)
 dir2_right.value(0)
 pwm_right.duty_u16(0)
 
-# ฟังก์ชัน map (เหมือนใน Arduino)
+# ฟังก์ชัน map
 def map_value(x, in_min, in_max, out_min, out_max):
     return int((x - in_min) * (out_max - out_min) / (in_max - in_min) + out_min)
 
@@ -113,14 +113,14 @@ def Motor(spl, spr, log = False):
     if sr > 0:
         if log:
             print(f"R: Forward, PWM={sr}")
-        dir1_right.value(0)  # เปลี่ยนจาก 1 เป็น 0
-        dir2_right.value(1)  # เปลี่ยนจาก 0 เป็น 1
+        dir1_right.value(0) 
+        dir2_right.value(1) 
         pwm_right.duty_u16(sr)
     elif sr < 0:
         if log:
             print(f"R: Backward, PWM={-sr}")
-        dir1_right.value(1)  # เปลี่ยนจาก 0 เป็น 1
-        dir2_right.value(0)  # เปลี่ยนจาก 1 เป็น 0
+        dir1_right.value(1)
+        dir2_right.value(0)
         pwm_right.duty_u16(-sr)
     else:
         if log:
@@ -136,8 +136,8 @@ def a_bz(sec):
     time.sleep(sec)
 
 
-a_bz(0.1)
-a_bz(0.1)
+a_bz(0.05)
+a_bz(0.05)
 
 # Check switch state
 print("ตรวจสอบสถานะ Switch SW1:", "LOW (กดอยู่)" if sw1.value() == 0 else "HIGH (ไม่ได้กด)")
@@ -146,64 +146,10 @@ print("ตรวจสอบสถานะ Switch SW1:", "LOW (กดอยู�
 print("กดสวิตช์ SW1 เพื่อเริ่มต้น...")
 while sw1.value() == 1:
     print("รอการกดสวิตช์...")
-    time.sleep(0.5)
+    time.sleep(0.1)
     
 print("เริ่มต้นโปรแกรม!")
 a_bz(0.3)
-
-# ทดสอบสัญญาณ่บัซเซอร์
-print("ทดสอบบัซเซอร์...")
-bz.value(1)
-time.sleep(0.2)
-bz.value(0)
-
-# ตรวจสอบขามอเตอร์
-print("Checking motor pins...")
-print(f"Left motor pins: PWM={pwm_left}, DIR1={dir1_left}, DIR2={dir2_left}")
-print(f"Right motor pins: PWM={pwm_right}, DIR1={dir1_right}, DIR2={dir2_right}")
-
-# ทดสอบขามอเตอร์แบบพื้นฐาน
-print("Basic pin test...")
-# ล้อซ้าย
-dir1_left.value(0)  # เปลี่ยนจาก 1 เป็น 0
-dir2_left.value(1)  # เปลี่ยนจาก 0 เป็น 1
-pwm_left.duty_u16(32768)  # 50% duty cycle
-print("Left motor forward - check if moving")
-time.sleep(1)
-
-dir1_left.value(0)
-dir2_left.value(0)
-pwm_left.duty_u16(0)
-print("Left motor stopped")
-time.sleep(0.5)
-
-# ล้อขวา
-dir1_right.value(0)  # เปลี่ยนจาก 1 เป็น 0
-dir2_right.value(1)  # เปลี่ยนจาก 0 เป็น 1
-pwm_right.duty_u16(32768)  # 50% duty cycle
-print("Right motor forward - check if moving")
-time.sleep(1)
-
-dir1_right.value(0)
-dir2_right.value(0)
-pwm_right.duty_u16(0)
-print("Right motor stopped")
-time.sleep(0.5)
-
-# motor testing using Motor function
-print("Testing motor forward with higher power...")
-Motor(50, 50, True)  # เพิ่มกำลังและเปิด logging
-time.sleep(1)        # เพิ่มเวลาให้มอเตอร์ทำงาน
-
-print("Testing motor backward with higher power...")
-Motor(-50, -50, True)
-time.sleep(1)
-
-print("Testing motor stop...")
-Motor(0, 0, True)
-time.sleep(0.5)
-
-print("Motor test completed")
 
 # ฟังก์ชัน callback สำหรับอ่าน encoder ของล้อซ้าย
 def left_callback(pin):
@@ -238,8 +184,9 @@ def send_odom(timer):
     right_dist = 2 * math.pi * WHEEL_RADIUS * (rt / TICKS_PER_REV)
 
     distance = (left_dist + right_dist) / 2.0
-    delta_theta = (right_dist - left_dist) / WHEEL_BASE
-
+    delta_theta = (left_dist - right_dist) / WHEEL_BASE  
+    
+    # คำนวณตำแหน่งใหม่
     x += distance * math.cos(theta)
     y += distance * math.sin(theta)
     theta += delta_theta
@@ -303,6 +250,8 @@ timer.init(freq=20, mode=Timer.PERIODIC, callback=send_odom)
 while True:
     check_uart_motor(True)
     time.sleep_ms(10) 
+
+
 
 
 
