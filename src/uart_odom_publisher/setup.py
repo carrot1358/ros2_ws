@@ -26,6 +26,7 @@ setup(
             'uart_odom_node = uart_odom_publisher.uart_odom_node:main',
             'teleop_node = uart_odom_publisher.teleop_node:main',
             'teleop_joy = uart_odom_publisher.teleop_joy:main',
+            'keyboard_control = uart_odom_publisher.keyboard_control:main',
         ],
     },
 )
