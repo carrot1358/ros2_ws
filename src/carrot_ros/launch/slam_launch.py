@@ -21,7 +21,11 @@ def generate_launch_description():
             package='uart_odom_publisher',
             executable='uart_odom_node',
             name='uart_odom_node',
-            output='screen'
+            output='screen',
+            parameters=[{
+                'serial_port': '/dev/ttyAMA1',
+                'baudrate': 115200
+            }]
         ),
         # Static transform
         Node(

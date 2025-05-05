@@ -17,8 +17,8 @@ def generate_launch_description():
         # ประกาศพารามิเตอร์ที่ผู้ใช้สามารถส่งผ่าน command line
         DeclareLaunchArgument(
             'serial_port',
-            default_value='/dev/ttyACM0',
-            description='พอร์ต serial ที่เชื่อมต่อกับ Pico'
+            default_value='/dev/ttyAMA0',  # ส่งคำสั่งมอเตอร์จาก Pi GPIO 14 -> Pico GPIO 0
+            description='พอร์ต serial (ttyAMA0) ที่ใช้ส่งคำสั่งมอเตอร์ไปยัง Pico'
         ),
         
         DeclareLaunchArgument(

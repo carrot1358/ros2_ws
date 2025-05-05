@@ -18,15 +18,24 @@ class UartOdomPublisher(Node):
 
         # Initialize TF2 broadcaster
         self.tf_broadcaster = tf2_ros.TransformBroadcaster(self)
+        
+        # เพิ่ม parameter สำหรับพอร์ต serial
+        self.declare_parameter('serial_port', '/dev/ttyAMA1')
+        self.declare_parameter('baudrate', 115200)
+        
+        # อ่านค่าพารามิเตอร์
+        self.serial_port = self.get_parameter('serial_port').value
+        self.baudrate = self.get_parameter('baudrate').value
 
         try:
-            self.ser = serial.Serial('/dev/ttyAMA0', 115200, timeout=0.5)
-            self.get_logger().info("Opened /dev/ttyAMA0")
+            self.ser = serial.Serial(self.serial_port, self.baudrate, timeout=0.5)
+            self.get_logger().info(f"Opened {self.serial_port} at {self.baudrate} baud")
         except Exception as e:
             self.get_logger().error(f"Failed to open UART: {e}")
             exit(1)
 
         self.timer = self.create_timer(0.05, self.timer_callback)  # 20Hz
+        self.last_valid_data = None  # เก็บข้อมูลที่ถูกต้องล่าสุด
 
     def timer_callback(self):
         try:
@@ -35,20 +44,51 @@ class UartOdomPublisher(Node):
                 self.get_logger().debug("No data received")
                 return
             
-            self.get_logger().debug(f"Received data: {line}")
-            
-            try:
-                data = json.loads(line)
-                self.get_logger().debug(f"Parsed JSON: {data}")
-            except json.JSONDecodeError as je:
-                self.get_logger().error(f"JSON parsing error: {je}, raw data: {line}")
-                return
+            # กรองข้อความที่ไม่ใช่ JSON
+            if line.startswith("OK:") or line.startswith("Error:"):
+                self.get_logger().debug(f"Ignoring command response: {line}")
                 
-            # Validate expected fields
-            required_fields = ['x', 'y', 'theta', 'v', 'w']
-            if not all(field in data for field in required_fields):
-                self.get_logger().error(f"Missing required fields in data: {data}")
-                return
+                # หากมี last_valid_data ให้ใช้ข้อมูลล่าสุดที่ถูกต้อง
+                if self.last_valid_data:
+                    data = self.last_valid_data
+                    self.get_logger().debug("Using last valid odometry data")
+                else:
+                    return
+            # กรองข้อความคำสั่งมอเตอร์จาก teleop_joy
+            elif line.startswith("CMD:"):
+                self.get_logger().debug(f"Ignoring motor command: {line}")
+                
+                # หากมี last_valid_data ให้ใช้ข้อมูลล่าสุดที่ถูกต้อง
+                if self.last_valid_data:
+                    data = self.last_valid_data
+                    self.get_logger().debug("Using last valid odometry data")
+                else:
+                    return
+            else:
+                self.get_logger().debug(f"Received data: {line}")
+                
+                try:
+                    data = json.loads(line)
+                    self.get_logger().debug(f"Parsed JSON: {data}")
+                    
+                    # Validate expected fields
+                    required_fields = ['x', 'y', 'theta', 'v', 'w']
+                    if not all(field in data for field in required_fields):
+                        self.get_logger().error(f"Missing required fields in data: {data}")
+                        return
+                    
+                    # เก็บข้อมูลที่ถูกต้องไว้
+                    self.last_valid_data = data
+                    
+                except json.JSONDecodeError as je:
+                    self.get_logger().error(f"JSON parsing error: {je}, raw data: {line}")
+                    
+                    # หากมี last_valid_data ให้ใช้ข้อมูลล่าสุดที่ถูกต้อง
+                    if self.last_valid_data:
+                        data = self.last_valid_data
+                        self.get_logger().debug("Using last valid odometry data")
+                    else:
+                        return
                 
             odom_msg = Odometry()
 

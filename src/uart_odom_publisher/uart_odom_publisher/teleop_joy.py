@@ -27,7 +27,6 @@ class TeleopJoy(Node):
         self.max_turn = self.get_parameter('max_turn').value
         self.linear_axis = self.get_parameter('linear_axis').value
         self.angular_axis = self.get_parameter('angular_axis').value
-        
         # เปิด Serial port
         try:
             self.ser = serial.Serial(self.serial_port, self.baudrate, timeout=1)
@@ -72,16 +71,28 @@ class TeleopJoy(Node):
     
     def send_command_loop(self):
         """ส่งคำสั่งควบคุมมอเตอร์ไปยัง Pico"""
+        last_command = None
+        
         while self.running:
             left_speed, right_speed = self.calculate_motor_speeds()
             command = {'left': left_speed, 'right': right_speed}
             
-            try:
-                self.ser.write((json.dumps(command) + '\r\n').encode())
-                self.get_logger().info(f'ส่งคำสั่ง: {command}')
-                time.sleep(0.05)  # ส่งคำสั่งทุก 50ms
-            except Exception as e:
-                self.get_logger().error(f'เกิดข้อผิดพลาดในการส่งคำสั่ง: {e}')
+            # ส่งคำสั่งเฉพาะเมื่อมีการเปลี่ยนแปลง เพื่อลดการรบกวน
+            if command != last_command:
+                try:
+                    # เพิ่มคำนำหน้า "CMD:" เพื่อให้ฝั่ง odometry สามารถแยกแยะได้
+                    if self.serial_port == '/dev/ttyAMA0':
+                        cmd_str = "CMD:" + json.dumps(command) + '\r\n'
+                    else:
+                        cmd_str = json.dumps(command) + '\r\n'
+                        
+                    self.ser.write(cmd_str.encode())
+                    self.get_logger().info(f'ส่งคำสั่ง: {command}')
+                    last_command = command
+                except Exception as e:
+                    self.get_logger().error(f'เกิดข้อผิดพลาดในการส่งคำสั่ง: {e}')
+            
+            time.sleep(0.05)  # ส่งคำสั่งทุก 50ms
     
     def calculate_motor_speeds(self):
         """คำนวณความเร็วมอเตอร์จากความเร็วเชิงเส้นและความเร็วเชิงมุม"""

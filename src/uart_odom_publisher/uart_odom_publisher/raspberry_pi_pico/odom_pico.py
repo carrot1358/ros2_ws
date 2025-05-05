@@ -3,8 +3,12 @@ import time
 import ujson
 import math
 
-# UART ส่งข้อมูลไปยัง Raspberry Pi
-uart = UART(0, baudrate=115200, tx=Pin(0), rx=Pin(1))
+
+# UART สำหรับส่ง odometry (GPIO 4 -> Pi GPIO 1)
+uart_odom = UART(1, baudrate=115200, tx=Pin(4), rx=Pin(5))
+
+# UART สำหรับรับคำสั่งมอเตอร์ (GPIO 0 <- Pi GPIO 14)
+uart_motor = UART(0, baudrate=115200, tx=Pin(0), rx=Pin(1)) 
 
 # Pin Encoder ล้อซ้าย (A, B)
 left_a = Pin(10, Pin.IN, Pin.PULL_UP)
@@ -253,22 +257,27 @@ def send_odom(timer):
     
     # print(odom)
 
-    uart.write(ujson.dumps(odom) + "\r\n")
+    uart_odom.write(ujson.dumps(odom) + "\r\n")
 
 # ฟังก์ชันรับคำสั่งจาก UART
-def check_uart(log = False):
-    global uart
-    if uart.any():
+def check_uart_motor(log = False):
+    global uart_motor
+    if uart_motor.any():
         if log:
             print("มีข้อมูลเข้ามาที่ UART")
         try:
-            cmd = uart.readline()
+            cmd = uart_motor.readline()
             if log:
                 print("Raw data:", cmd)
             if cmd:
                 cmd_str = cmd.decode('utf-8').strip()
                 if log:
                     print("Decoded:", cmd_str)
+                
+                # ตรวจสอบและตัดคำนำหน้า CMD: ออก
+                if cmd_str.startswith('CMD:'):
+                    cmd_str = cmd_str[4:]  # ตัด CMD: ออก
+                
                 cmd_data = ujson.loads(cmd_str)
                 if log:
                     print("Parsed JSON:", cmd_data)
@@ -280,11 +289,11 @@ def check_uart(log = False):
                         print(f"Motor command: L={left_speed}, R={right_speed}")
                     Motor(left_speed, right_speed)
                     # ทดสอบส่งคำตอบกลับ
-                    uart.write("OK: Motor command received\r\n")
+                    uart_motor.write("OK: Motor command received\r\n")
         except Exception as e:
             print("Error parsing command:", e)
             # ส่งข้อความแสดงข้อผิดพลาดกลับไป
-            uart.write(f"Error: {str(e)}\r\n")
+            uart_motor.write(f"Error: {str(e)}\r\n")
 
 # === เริ่ม Timer ทุก 50ms สำหรับ odometry ===
 timer = Timer()
@@ -292,8 +301,9 @@ timer.init(freq=20, mode=Timer.PERIODIC, callback=send_odom)
 
 # === ลูปหลักสำหรับรับคำสั่งควบคุมมอเตอร์ ===
 while True:
-    check_uart(True)
+    check_uart_motor(True)
     time.sleep_ms(10) 
+
 
 
 
