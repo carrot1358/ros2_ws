@@ -26,6 +26,10 @@ class UartOdomPublisher(Node):
         # อ่านค่าพารามิเตอร์
         self.serial_port = self.get_parameter('serial_port').value
         self.baudrate = self.get_parameter('baudrate').value
+        
+        # odom data
+        self.current_odom_data = None
+        self.last_odom_data = None
 
         try:
             self.ser = serial.Serial(self.serial_port, self.baudrate, timeout=0.5)
@@ -95,7 +99,7 @@ class UartOdomPublisher(Node):
             # Header
             odom_msg.header.stamp = self.get_clock().now().to_msg()
             odom_msg.header.frame_id = "odom"
-            odom_msg.child_frame_id = "base_link"
+            odom_msg.child_frame_id = "base_footprint"
 
             # Pose
             odom_msg.pose.pose.position = Point(x=data['x'], y=data['y'], z=0.0)
@@ -110,13 +114,15 @@ class UartOdomPublisher(Node):
 
             # Publish odometry
             self.publisher_.publish(odom_msg)
-            self.get_logger().info(f"Published odom: x={data['x']:.4f}, y={data['y']:.4f}, theta={data['theta']:.4f}, v={data['v']:.4f}, w={data['w']:.4f}")
-
-            # Publish TF (odom -> base_link)
+            self.current_odom_data = data
+            if self.current_odom_data != self.last_odom_data:
+                self.get_logger().info(f"Published odom: x={data['x']:.4f}, y={data['y']:.4f}, theta={data['theta']:.4f}, v={data['v']:.4f}, w={data['w']:.4f}")
+            self.last_odom_data = self.current_odom_data
+            # Publish TF (odom -> base_footprint)
             t = TransformStamped()
             t.header.stamp = odom_msg.header.stamp
             t.header.frame_id = "odom"
-            t.child_frame_id = "base_link"
+            t.child_frame_id = "base_footprint"
             t.transform.translation.x = data['x']
             t.transform.translation.y = data['y']
             t.transform.translation.z = 0.0
