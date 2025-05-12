@@ -6,33 +6,32 @@ from ament_index_python.packages import get_package_share_directory
 import os
 
 def generate_launch_description():
-    rplidar_launch_file = os.path.join(
-        get_package_share_directory('rplidar_ros'),
-        'launch', 'rplidar_a1_launch.py'
-    )
+    # โหลดไฟล์ URDF
+    urdf_file_name = 'carrot_robot.urdf'
+    urdf_file = os.path.join(
+        get_package_share_directory('carrot_ros'),
+        'urdf',
+        urdf_file_name)
+    
+    # อ่านไฟล์ URDF
+    with open(urdf_file, 'r') as infp:
+        robot_desc = infp.read()
 
-    return LaunchDescription([
-        # RPLIDAR
-        IncludeLaunchDescription(
-            PythonLaunchDescriptionSource(rplidar_launch_file)
-        ),
-        # Odometry
+    return LaunchDescription([      
+        # Robot State Publisher (ใช้แทน Static transform)
         Node(
-            package='uart_odom_publisher',
-            executable='uart_odom_node',
-            name='uart_odom_node',
-            output='screen',
-            parameters=[{
-                'serial_port': '/dev/ttyAMA1',
-                'baudrate': 115200
-            }]
+            package='robot_state_publisher',
+            executable='robot_state_publisher',
+            name='robot_state_publisher',
+            parameters=[{'robot_description': robot_desc}],
+            output='screen'
         ),
-        # Static transform
+        # Joint State Publisher
         Node(
-            package='tf2_ros',
-            executable='static_transform_publisher',
-            name='base_to_laser_tf',
-            arguments=['0.0', '0.0', '0.133', '0.0', '0.0', '0.0', 'base_link', 'laser']
+            package='joint_state_publisher',
+            executable='joint_state_publisher',
+            name='joint_state_publisher',
+            output='screen'
         ),
         # SLAM Toolbox
         Node(
@@ -54,7 +53,8 @@ def generate_launch_description():
             parameters=[{
                 'autostart': True,
                 'node_names': ['slam_toolbox'],
-                'bond_timeout': 10.0
+                'bond_timeout': 30.0,
+                'attempt_respawn_reconnection': True
             }]
         )
     ])
